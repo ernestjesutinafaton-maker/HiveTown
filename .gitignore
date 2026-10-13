@@ -1,0 +1,10 @@
+# Dépendances installées par npm (régénérables avec "npm install")
+node_modules/
+
+# Secrets : clé API, jamais sur GitHub
+.env
+
+# Code compilé
+dist/
+
+# Doc officielle du format : https://git-scm.com/docs/gitignore
