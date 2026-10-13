@@ -5,7 +5,7 @@ import * as THREE from "three";
 // molette = zoom, clic droit = déplacer). Il vient des "addons" de Three.js.
 // Doc : https://threejs.org/docs/#examples/en/controls/OrbitControls
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import { chargerMonde, estValide, RIVE_Z, ECHELLE } from "./donnees.js";
+import { chargerMonde, chargerDecision, estValide, RIVE_Z, ECHELLE } from "./donnees.js";
 import "./style.css"; // adapte le chemin si besoin
 
 // --- SCÈNE ---
@@ -73,6 +73,11 @@ scene.add(eau);
 // Doc for...of : https://developer.mozilla.org/fr/docs/Web/JavaScript/Reference/Statements/for...of
 // --- EMPLACEMENTS (chargés depuis le serveur) ---
 // Doc async/await : https://developer.mozilla.org/fr/docs/Learn/JavaScript/Asynchronous/Promises
+// Position 3D d'un emplacement, calculée à partir de ses données.
+function positionDe(emp) {
+  return new THREE.Vector3(emp.x, 0, RIVE_Z + emp.distanceRiveM * ECHELLE);
+}
+
 async function afficherEmplacements() {
   try {
     const monde = await chargerMonde();
@@ -83,12 +88,36 @@ async function afficherEmplacements() {
           color: estValide(emp, monde) ? 0x00e676 : 0xe74c3c,
         })
       );
-      parcelle.position.set(emp.x, 0.05, RIVE_Z + emp.distanceRiveM * ECHELLE);
+      const pos = positionDe(emp);
+      parcelle.position.set(pos.x, 0.05, pos.z);
       parcelle.receiveShadow = true;
       scene.add(parcelle);
     }
+
+    // La décision des agents : si elle existe, on construit la maison.
+    const decision = await chargerDecision();
+    if (decision) {
+      const emp = monde.emplacements.find((e) => e.id === decision.emplacementId);
+      if (emp) {
+        const maison = new THREE.Mesh(
+          new THREE.BoxGeometry(1.8, 1.4, 1.8),
+          new THREE.MeshStandardMaterial({ color: 0xc98b4a })
+        );
+        const pos = positionDe(emp);
+        maison.position.set(pos.x, 0.8, pos.z); // posée sur la parcelle
+        maison.castShadow = true;
+        scene.add(maison);
+
+        // Petit bandeau d'information en HTML par-dessus la scène.
+        const info = document.createElement("div");
+        info.id = "info";
+        // textContent (et non innerHTML) : le texte vient d'une IA, on ne l'interprète
+        // jamais comme du HTML. Doc : https://developer.mozilla.org/fr/docs/Web/API/Node/textContent
+        info.textContent = `Orion a choisi « ${emp.nom} » : ${decision.raison}`;
+        document.body.appendChild(info);
+      }
+    }
   } catch (erreur) {
-    // Serveur éteint ou erreur réseau : on le signale sans casser la scène.
     console.error("Impossible de charger le monde :", erreur);
   }
 }

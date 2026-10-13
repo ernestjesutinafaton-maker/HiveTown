@@ -6,6 +6,9 @@ import express from "express";
 // Doc : https://developer.mozilla.org/fr/docs/Web/HTTP/CORS
 import cors from "cors";
 import { monde } from "./monde";
+import { lireDecision } from "./decision";
+
+
 
 const app = express();
 const PORT = 3000;
@@ -22,4 +25,9 @@ app.get("/api/monde", (_req, res) => {
 
 app.listen(PORT, () => {
   console.log(`Serveur Hivetown : http://localhost:${PORT}`);
+});
+
+// Renvoie la dernière décision (ou null s'il n'y en a pas).
+app.get("/api/decision", (_req, res) => {
+  res.json(lireDecision());
 });

@@ -10,3 +10,17 @@ body {
 canvas {
   display: block;
 }
+/* Bandeau d'information posé par-dessus la scène 3D.
+   Doc position : https://developer.mozilla.org/fr/docs/Web/CSS/position */
+#info {
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  max-width: 360px;
+  padding: 10px 14px;
+  background: rgba(0, 0, 0, 0.7);
+  color: #fff;
+  font-family: sans-serif;
+  font-size: 14px;
+  border-radius: 8px;
+}

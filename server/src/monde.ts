@@ -31,7 +31,7 @@ export type EtatMonde = {
 export const monde: EtatMonde = {
   stock: { bois: 400, pierre: 250, argile: 1000 },
   besoinsMaison: { bois: 30, pierre: 20, argile: 8 },
-  crueMaxM: 3,
+  crueMaxM: 5,
   margeCrueMinM: 1,
   emplacements: [
     { id: "A", nom: "Berge basse", x: -4, distanceRiveM: 5,  hauteurAuDessusEauM: 2, sol: "sableux" },
@@ -55,4 +55,24 @@ export const monde: EtatMonde = {
 // Doc : https://developer.mozilla.org/fr/docs/Web/JavaScript/Reference/Global_Objects/JSON/stringify
 export function decrireMonde(m: EtatMonde): string {
   return JSON.stringify(m, null, 2);
+}
+// Vérifie en CODE (pas par le modèle) qu'on peut construire à cet emplacement.
+// Renvoie null si tout est valide, sinon un message d'erreur.
+// Doc Array.find : https://developer.mozilla.org/fr/docs/Web/JavaScript/Reference/Global_Objects/Array/find
+export function verifierConstruction(m: EtatMonde, emplacementId: string): string | null {
+  const emp = m.emplacements.find((e) => e.id === emplacementId);
+  if (!emp) return `Emplacement inconnu : ${emplacementId}`;
+
+  // Règle de crue : hauteur - crue max doit être >= marge minimale.
+  if (emp.hauteurAuDessusEauM - m.crueMaxM < m.margeCrueMinM) {
+    return `Marge de crue insuffisante pour « ${emp.nom} »`;
+  }
+
+  // Règle de stock : il faut assez de chaque ressource.
+  const { stock, besoinsMaison: b } = m;
+  if (stock.bois < b.bois || stock.pierre < b.pierre || stock.argile < b.argile) {
+    return "Stock insuffisant pour construire la maison";
+  }
+
+  return null; // tout est valide
 }

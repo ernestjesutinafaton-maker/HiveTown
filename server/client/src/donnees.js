@@ -23,3 +23,9 @@ export async function chargerMonde() {
 export function estValide(emplacement, monde) {
   return emplacement.hauteurAuDessusEauM - monde.crueMaxM >= monde.margeCrueMinM;
 }
+// Récupère la dernière décision des agents (ou null).
+export async function chargerDecision() {
+  const reponse = await fetch("http://localhost:3000/api/decision");
+  if (!reponse.ok) throw new Error(`Erreur serveur : ${reponse.status}`);
+  return reponse.json();
+}

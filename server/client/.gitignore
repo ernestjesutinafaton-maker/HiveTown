@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Décision générée par les agents (donnée d'exécution)
+server/data/

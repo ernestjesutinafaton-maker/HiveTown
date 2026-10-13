@@ -14,7 +14,8 @@ import Anthropic from "@anthropic-ai/sdk";
 
 // État du monde partagé (stock, emplacement, maison) défini dans monde.ts.
 // Si TypeScript ou tsx réclame l'extension, utilise "./monde.js".
-import { monde, decrireMonde } from "./monde";
+import { monde, decrireMonde, verifierConstruction } from "./monde";
+import { sauverDecision, effacerDecision, type Decision } from "./decision";
 
 const client = new Anthropic();
 
@@ -236,6 +237,64 @@ async function executerTache(
     tokens: reponse.usage.input_tokens + reponse.usage.output_tokens,
   };
 }
+// Orion choisit un emplacement. Le modèle PROPOSE, le code VÉRIFIE.
+async function demanderDecision(
+  agent: Agent,
+  demande: string,
+  resultats: string[]
+): Promise<{ decision: Decision | null; tokens: number }> {
+  const reponse = await client.messages.create({
+    model: MODELE,
+    max_tokens: 800,
+    system: agent.role + "\nTu réponds UNIQUEMENT avec du JSON valide, sans texte autour.",
+    messages: [
+      {
+        role: "user",
+        content:
+          `Demande : ${demande}\n\n` +
+          `État actuel du monde (données fiables) :\n${decrireMonde(monde)}\n\n` +
+          `Résultats de l'équipe :\n${resultats.join("\n\n") || "(aucun)"}\n\n` +
+          `Choisis UN emplacement de la liste qui respecte les règles. Format exact :\n` +
+          `{"emplacementId":"X","raison":"une phrase"}`,
+      },
+    ],
+  });
+
+  let texte = "";
+  for (const bloc of reponse.content) {
+    if (bloc.type === "text") texte += bloc.text;
+  }
+  const tokens = reponse.usage.input_tokens + reponse.usage.output_tokens;
+
+  // Le JSON peut être invalide : on le gère au lieu de planter.
+  let brut: { emplacementId?: string; raison?: string };
+  try {
+    brut = lireJson(texte) as { emplacementId?: string; raison?: string };
+  } catch {
+    console.warn("[Refusé] Orion n'a pas renvoyé un JSON valide.");
+    return { decision: null, tokens };
+  }
+  if (typeof brut.emplacementId !== "string") {
+    console.warn("[Refusé] Aucun emplacement indiqué par Orion.");
+    return { decision: null, tokens };
+  }
+
+  // Vérification par le code : on ne croit jamais le modèle sur parole.
+  const erreur = verifierConstruction(monde, brut.emplacementId);
+  if (erreur) {
+    console.warn(`[Refusé] Choix d'Orion rejeté par le code : ${erreur}`);
+    return { decision: null, tokens };
+  }
+
+  return {
+    decision: {
+      emplacementId: brut.emplacementId,
+      raison: brut.raison ?? "", // ?? : valeur par défaut si undefined. Doc : https://developer.mozilla.org/fr/docs/Web/JavaScript/Reference/Operators/Nullish_coalescing
+      date: new Date().toISOString(),
+    },
+    tokens,
+  };
+}
 
 // -----------------------------------------------------------------------------
 // main : orchestre tout le flux.
@@ -246,6 +305,7 @@ async function main(): Promise<void> {
   const demande = "Construire une petite maison à une pièce au bord du point d'eau.";
   const equipe = [orion, maya];
   let tokensTotal = 0;
+  effacerDecision(); // chaque exécution repart d'une carte sans décision
 
   // 1) Le chef établit le plan.
   const plan = await demanderPlan(demande, equipe);
@@ -271,6 +331,19 @@ async function main(): Promise<void> {
 
     historique.push({ auteur: `${agent.nom} (tâche #${tache.id})`, texte });
     console.log(`#${tache.id} ${agent.nom} : ${texte}\n`);
+  }
+  // 2 bis) Orion choisit l'emplacement ; le code valide ; on enregistre.
+  if (tokensTotal < BUDGET_TOKENS) {
+    const resultats = historique.map((m) => `${m.auteur} : ${m.texte}`);
+    const choix = await demanderDecision(orion, demande, resultats);
+    tokensTotal += choix.tokens;
+
+    if (choix.decision) {
+      sauverDecision(choix.decision);
+      console.log(`[Décision] Emplacement ${choix.decision.emplacementId} : ${choix.decision.raison}\n`);
+    } else {
+      console.log("[Aucune décision valide] Rien n'est enregistré.\n");
+    }
   }
 
   // 3) Le chef rédige le rapport final (on réutilise faireParler).
