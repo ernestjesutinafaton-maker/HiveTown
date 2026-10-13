@@ -1,0 +1,12 @@
+/* La scène 3D occupe toute la fenêtre : on supprime les marges par défaut.
+   Doc : https://developer.mozilla.org/fr/docs/Web/CSS/margin */
+body {
+  margin: 0;
+  overflow: hidden; /* pas de barres de défilement */
+}
+
+/* Un canvas est "inline" par défaut, ce qui crée un petit espace sous lui.
+   Doc : https://developer.mozilla.org/fr/docs/Web/CSS/display */
+canvas {
+  display: block;
+}
