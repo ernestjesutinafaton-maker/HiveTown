@@ -5,6 +5,7 @@ import * as THREE from "three";
 // molette = zoom, clic droit = déplacer). Il vient des "addons" de Three.js.
 // Doc : https://threejs.org/docs/#examples/en/controls/OrbitControls
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { chargerMonde, estValide, RIVE_Z, ECHELLE } from "./donnees.js";
 import "./style.css"; // adapte le chemin si besoin
 
 // --- SCÈNE ---
@@ -50,30 +51,48 @@ scene.add(soleil);
 // Doc : https://threejs.org/docs/#api/en/geometries/PlaneGeometry
 const sol = new THREE.Mesh(
   new THREE.PlaneGeometry(20, 20),
-  new THREE.MeshStandardMaterial({ color: 0x4a8f3c })
+  new THREE.MeshStandardMaterial({ color: 0xc2b280 })
 );
 sol.rotation.x = -Math.PI / 2;
 sol.receiveShadow = true; // le sol reçoit les ombres
 scene.add(sol);
 
-// --- CUBE (futur modèle de maison) ---
-// MeshStandardMaterial réagit à la lumière. Doc : https://threejs.org/docs/#api/en/materials/MeshStandardMaterial
-const cube = new THREE.Mesh(
-  new THREE.BoxGeometry(1, 1, 1),
-  new THREE.MeshStandardMaterial({ color: 0xc98b4a })
+// --- EAU ---
+// Un plan bleu juste au-dessus du sol (y = 0,02) pour éviter que les deux
+// surfaces se superposent exactement (défaut visuel appelé "z-fighting").
+const eau = new THREE.Mesh(
+  new THREE.PlaneGeometry(20, 3),
+  new THREE.MeshStandardMaterial({ color: 0x3d85c6 })
 );
-cube.position.y = 0.5; // le cube fait 1 de haut, son centre est donc à 0,5 pour qu'il pose sur le sol
-cube.castShadow = true; // le cube projette une ombre
-scene.add(cube);
+eau.rotation.x = -Math.PI / 2;
+eau.position.set(0, 0.02, RIVE_Z - 1.5); // l'eau s'étend derrière la rive
+scene.add(eau);
 
-const cube2 = new THREE.Mesh(
-  new THREE.BoxGeometry(1, 1, 1),
-  new THREE.MeshStandardMaterial({ color: 0xff0000 })
-);
-cube2.position.y = 0.5; // le cube fait 1 de haut, son centre est donc à 0,5 pour qu'il pose sur le sol
-cube2.position.x = 2;
-cube2.castShadow = true; // le cube projette une ombre
-scene.add(cube2);
+// --- EMPLACEMENTS ---
+// On parcourt la liste de données et on crée une plaque 3D pour chaque entrée.
+// Doc for...of : https://developer.mozilla.org/fr/docs/Web/JavaScript/Reference/Statements/for...of
+// --- EMPLACEMENTS (chargés depuis le serveur) ---
+// Doc async/await : https://developer.mozilla.org/fr/docs/Learn/JavaScript/Asynchronous/Promises
+async function afficherEmplacements() {
+  try {
+    const monde = await chargerMonde();
+    for (const emp of monde.emplacements) {
+      const parcelle = new THREE.Mesh(
+        new THREE.BoxGeometry(3, 0.1, 3),
+        new THREE.MeshStandardMaterial({
+          color: estValide(emp, monde) ? 0x00e676 : 0xe74c3c,
+        })
+      );
+      parcelle.position.set(emp.x, 0.05, RIVE_Z + emp.distanceRiveM * ECHELLE);
+      parcelle.receiveShadow = true;
+      scene.add(parcelle);
+    }
+  } catch (erreur) {
+    // Serveur éteint ou erreur réseau : on le signale sans casser la scène.
+    console.error("Impossible de charger le monde :", erreur);
+  }
+}
+afficherEmplacements();
 
 // --- CONTRÔLES DE LA CAMÉRA ---
 const controles = new OrbitControls(camera, renderer.domElement);
