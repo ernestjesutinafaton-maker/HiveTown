@@ -11,8 +11,8 @@ type Message = { auteur: string; texte: string };
 
 // --- Garde-fous (promesse du README : jamais de boucle infinie) ---
 const MAX_TOURS = 6;          // nombre maximal de prises de parole
-const BUDGET_TOKENS = 8000;   // plafond de tokens pour toute la conversation
-  // --- Garde-fous du chef ---
+const BUDGET_TOKENS = 10000;   // plafond de tokens pour toute la conversation
+// --- Garde-fous du chef ---
 const MAX_TACHES = 4; // le chef ne peut pas créer plus de 4 tâches
 
 // Une tâche assignée à un membre de l'équipe.
@@ -27,14 +27,83 @@ const chef: Agent = {
 };
 
 // Les membres de l'équipe qui recevront les tâches.
-const orion: Agent = {
-  nom: "Orion",
-  role: "Tu es Orion, bâtisseur : tu construis et évalues la faisabilité technique.",
-};
+
 const maya: Agent = {
   nom: "Maya",
   role: "Tu es Maya, intendante : tu gères le stock de ressources et les récoltes.",
 };
+
+
+// Le "prompt système" fixe le rôle et les contraintes de chaque agent.
+// Doc : https://docs.claude.com/en/docs/build-with-claude/prompt-engineering/system-prompts
+const lyra: Agent = {
+  nom: "Lyra",
+  role:
+    "Tu es Lyra, cheffe de projet prudente dans le monde d'Hivetown. " +
+    "Tu proposes des plans simples et réalistes. " +
+    "Tu refuses toute proposition exagérée. Réponds en 2 phrases maximum.",
+};
+
+const orion: Agent = {
+  nom: "Orion",
+  role:
+    "Tu es Orion, bâtisseur dans le monde d'Hivetown. " +
+    "Tu évalues la faisabilité de ce qu'on te propose et tu poses une question utile. " +
+    "Réponds en 2 phrases maximum.",
+};
+// Même personnage que le chef, mais avec une consigne différente : résumer.
+const redactrice: Agent = {
+  nom: "Lyra",
+  role:
+    "Tu es Lyra, cheffe de projet. À partir des résultats de ton équipe, tu " +
+    "rédiges un court rapport final (5 phrases maximum) : ce qui est décidé et " +
+    "ce qui manque encore. Tu n'inventes rien.",
+};
+
+// Fait parler UN agent et renvoie son texte + les tokens consommés.
+// Promise<...> : le type de retour d'une fonction async.
+// Doc : https://developer.mozilla.org/fr/docs/Web/JavaScript/Reference/Global_Objects/Promise
+async function faireParler(
+  agent: Agent,
+  sujet: string,
+  historique: Message[]
+): Promise<{ texte: string; tokens: number }> {
+  // On transforme l'historique en texte : une ligne "Nom : phrase" par message.
+  // Doc map/join : https://developer.mozilla.org/fr/docs/Web/JavaScript/Reference/Global_Objects/Array/map
+  const conversation = historique.map((m) => `${m.auteur} : ${m.texte}`).join("\n");
+
+  const reponse = await client.messages.create({
+    model: "claude-haiku-5-5",
+    max_tokens: 800,
+    system: agent.role,
+    messages: [
+      {
+        role: "user",
+        content:
+          `Sujet : ${sujet}\n\n` +
+          `Conversation jusqu'ici :\n${conversation || "(aucune)"}\n\n` +
+          `À toi de parler, ${agent.nom}.`,
+      },
+    ],
+  });
+// stop_reason indique pourquoi le modèle s'est arrêté.
+// "max_tokens" = la réponse a été coupée par notre limite.
+// Doc : https://docs.claude.com/en/api/messages
+if (reponse.stop_reason === "max_tokens") {
+  console.warn(`[Attention] La réponse de ${agent.nom} a été coupée (max_tokens).`);
+}
+  // On récupère le texte des blocs de type "text".
+  let texte = "";
+  for (const bloc of reponse.content) {
+    if (bloc.type === "text") texte += bloc.text;
+  }
+
+  return {
+    texte,
+    tokens: reponse.usage.input_tokens + reponse.usage.output_tokens,
+  };
+}
+
 
 // Transforme le texte renvoyé par le chef en objet JavaScript.
 // On retire d'abord d'éventuelles balises ```json que le modèle pourrait ajouter.
@@ -97,19 +166,85 @@ async function demanderPlan(
     tokens: reponse.usage.input_tokens + reponse.usage.output_tokens,
   };
 }
+// Un agent exécute UNE tâche en tenant compte des résultats déjà produits.
+async function executerTache(
+  agent: Agent,
+  tache: Tache,
+  demande: string,
+  resultats: string[]
+): Promise<{ texte: string; tokens: number }> {
+  // Si c'est la première tâche, il n'y a encore aucun résultat.
+  const contexte = resultats.length > 0 ? resultats.join("\n\n") : "(aucun résultat pour le moment)";
 
+  const reponse = await client.messages.create({
+    model: "claude-haiku-5-5",
+    max_tokens: 800,
+    // On interdit explicitement d'inventer des données : voir la remarque plus bas.
+    system:
+      agent.role +
+      "\nSi une information te manque (stock, mesures...), dis-le clairement " +
+      "au lieu de l'inventer. Réponds en 4 phrases maximum.",
+    messages: [
+      {
+        role: "user",
+        content:
+          `Demande globale : ${demande}\n\n` +
+          `Résultats déjà obtenus :\n${contexte}\n\n` +
+          `Ta tâche (#${tache.id}) : ${tache.description}`,
+      },
+    ],
+  });
+
+  let texte = "";
+  for (const bloc of reponse.content) {
+    if (bloc.type === "text") texte += bloc.text;
+  }
+
+  return {
+    texte,
+    tokens: reponse.usage.input_tokens + reponse.usage.output_tokens,
+  };
+}
 async function main(): Promise<void> {
   const demande = "Construire une petite maison à une pièce au bord du point d'eau.";
   const equipe = [orion, maya];
+  let tokensTotal = 0;
 
-  const { taches, tokens } = await demanderPlan(demande, equipe);
+  // 1) Le chef établit le plan.
+  const plan = await demanderPlan(demande, equipe);
+  tokensTotal += plan.tokens;
 
-  for (const t of taches) {
-    console.log(`#${t.id} → ${t.assigneA} : ${t.description}`);
+  // 2) Chaque tâche est exécutée par l'agent assigné, dans l'ordre.
+  const historique: Message[] = [];
+  for (const tache of plan.taches) {
+    // Garde-fou : on s'arrête si le budget est atteint.
+    if (tokensTotal >= BUDGET_TOKENS) {
+      console.log("\n[Arrêt] Budget de tokens atteint.");
+      break;
+    }
+
+    // Array.find renvoie le premier élément qui correspond.
+    // Doc : https://developer.mozilla.org/fr/docs/Web/JavaScript/Reference/Global_Objects/Array/find
+    const agent = equipe.find((a) => a.nom === tache.assigneA);
+    if (!agent) continue; // sécurité : ne devrait pas arriver (déjà filtré)
+
+    const resultatsPrecedents = historique.map((m) => `${m.auteur} : ${m.texte}`);
+    const { texte, tokens } = await executerTache(agent, tache, demande, resultatsPrecedents);
+    tokensTotal += tokens;
+
+    historique.push({ auteur: `${agent.nom} (tâche #${tache.id})`, texte });
+    console.log(`#${tache.id} ${agent.nom} : ${texte}\n`);
   }
-  console.log(`\nTokens utilisés : ${tokens}`);
+
+  // 3) Le chef rédige le rapport final (on réutilise faireParler).
+  const rapport = await faireParler(redactrice, demande, historique);
+  tokensTotal += rapport.tokens;
+  console.log(`--- RAPPORT FINAL ---\n${rapport.texte}\n`);
+
+  console.log(`Tokens utilisés au total : ${tokensTotal}`);
 }
 
 main().catch((erreur) => {
   console.error("Erreur :", erreur.message);
 });
+
