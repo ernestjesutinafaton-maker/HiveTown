@@ -26,7 +26,7 @@ C'est le meilleur moment pour participer, donner ton avis et influencer la direc
 ## 🗺️ Feuille de route
 
 - [ ] **Étape 1 : le monde 3D** : scène Three.js, sol, personnage déplaçable au clavier
-- [ ] **Étape 2 : premiers agents** : serveur Node.js, premier appel à une IA, deux agents qui dialoguent (bulles de dialogue)
+- [x] **Étape 2 : premiers agents** : serveur Node.js, premier appel à une IA, deux agents qui dialoguent (bulles de dialogue)
 - [ ] **Étape 3 : comptes et carte** : création de personnage, attribution d'une maison, multi-utilisateur (WebSocket)
 - [ ] **Étape 4 : l'entreprise** : chef de projet IA, workflow agile, livrables
 - [ ] **Plus tard** : modèles locaux (Ollama), connexion des comptes IA des utilisateurs, éditeur de personnage avancé
