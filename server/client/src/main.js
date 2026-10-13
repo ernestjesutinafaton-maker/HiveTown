@@ -137,9 +137,84 @@ window.addEventListener("resize", () => {
   camera.updateProjectionMatrix(); // obligatoire après un changement d'aspect
   renderer.setSize(window.innerWidth, window.innerHeight);
 });
+// --- AVATAR DU JOUEUR ---
+// Un Group rassemble plusieurs objets 3D qui bougent ensemble.
+// Doc : https://threejs.org/docs/#api/en/objects/Group
+const avatar = new THREE.Group();
+
+// Corps : une capsule (rayon 0,3 ; longueur 0,6 => hauteur totale 1,2).
+// Doc : https://threejs.org/docs/#api/en/geometries/CapsuleGeometry
+const corps = new THREE.Mesh(
+  new THREE.CapsuleGeometry(0.3, 0.6, 4, 8),
+  new THREE.MeshStandardMaterial({ color: 0x7c4dff })
+);
+corps.castShadow = true;
+avatar.add(corps);
+
+// "Nez" : une petite sphère à l'avant, pour voir dans quelle direction il regarde.
+const nez = new THREE.Mesh(
+  new THREE.SphereGeometry(0.1, 12, 12),
+  new THREE.MeshStandardMaterial({ color: 0xffeb3b })
+);
+nez.position.set(0, 0.3, 0.3);
+avatar.add(nez);
+
+avatar.position.set(0, 0.6, 3); // y = 0,6 : la moitié de la hauteur, il pose sur le sol
+scene.add(avatar);
+
+// --- CLAVIER ---
+// On garde l'ensemble des touches actuellement enfoncées.
+// Doc Set : https://developer.mozilla.org/fr/docs/Web/JavaScript/Reference/Global_Objects/Set
+const touches = new Set();
+// Doc KeyboardEvent.key : https://developer.mozilla.org/fr/docs/Web/API/KeyboardEvent/key
+window.addEventListener("keydown", (e) => touches.add(e.key.toLowerCase()));
+window.addEventListener("keyup", (e) => touches.delete(e.key.toLowerCase()));
+
+const VITESSE = 4; // unités de la scène par seconde
+
+// Temps écoulé entre deux images, pour une vitesse identique quel que soit l'écran.
+// Doc performance.now : https://developer.mozilla.org/fr/docs/Web/API/Performance/now
+let dernierTemps = performance.now();
+
+function deplacerAvatar(dt) {
+  // Direction souhaitée selon les touches (ZQSD + flèches).
+  const direction = new THREE.Vector3();
+  if (touches.has("z") || touches.has("arrowup")) direction.z -= 1;
+  if (touches.has("s") || touches.has("arrowdown")) direction.z += 1;
+  if (touches.has("q") || touches.has("arrowleft")) direction.x -= 1;
+  if (touches.has("d") || touches.has("arrowright")) direction.x += 1;
+
+  if (direction.lengthSq() === 0) return; // aucune touche : on ne bouge pas
+
+  // normalize : évite d'aller plus vite en diagonale.
+  // Doc Vector3 : https://threejs.org/docs/#api/en/math/Vector3
+  direction.normalize();
+
+  // Nouvelle position, limitée aux bords du sol (20 x 20) et à la rive (pas dans l'eau).
+  // Doc Math.max / Math.min : https://developer.mozilla.org/fr/docs/Web/JavaScript/Reference/Global_Objects/Math/max
+  const ancienne = avatar.position.clone();
+  const nouvelle = ancienne.clone().addScaledVector(direction, VITESSE * dt);
+  nouvelle.x = Math.max(-9.5, Math.min(9.5, nouvelle.x));
+  nouvelle.z = Math.max(RIVE_Z + 0.5, Math.min(9.5, nouvelle.z));
+  avatar.position.copy(nouvelle);
+
+  // L'avatar se tourne vers sa direction de marche.
+  // Doc Math.atan2 : https://developer.mozilla.org/fr/docs/Web/JavaScript/Reference/Global_Objects/Math/atan2
+  avatar.rotation.y = Math.atan2(direction.x, direction.z);
+
+  // La caméra suit : on déplace la caméra ET sa cible du même vecteur.
+  const delta = nouvelle.sub(ancienne);
+  camera.position.add(delta);
+  controles.target.add(delta);
+}
 
 // --- BOUCLE D'ANIMATION ---
 renderer.setAnimationLoop(() => {
-  controles.update(); // nécessaire quand enableDamping est activé
+  const maintenant = performance.now();
+  const dt = (maintenant - dernierTemps) / 1000; // en secondes
+  dernierTemps = maintenant;
+
+  deplacerAvatar(dt);
+  controles.update();
   renderer.render(scene, camera);
-});  
+});
