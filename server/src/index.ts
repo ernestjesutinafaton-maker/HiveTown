@@ -7,25 +7,15 @@
 // Charge les variables du fichier .env dans process.env (ANTHROPIC_API_KEY).
 // Doc : https://github.com/motdotla/dotenv
 import "dotenv/config";
-
-// SDK officiel : lit automatiquement ANTHROPIC_API_KEY dans process.env.
-// Doc : https://github.com/anthropics/anthropic-sdk-typescript
-import Anthropic from "@anthropic-ai/sdk";
-
 // État du monde partagé (stock, emplacement, maison) défini dans monde.ts.
 // Si TypeScript ou tsx réclame l'extension, utilise "./monde.js".
 import { monde, decrireMonde, verifierConstruction } from "./monde";
 import { sauverDecision, effacerDecision, type Decision } from "./decision";
-
-const client = new Anthropic();
-
+import { client, MODELE, chef, redactrice, orion, maya, type Agent } from "./agents";
 // -----------------------------------------------------------------------------
 // Types : ils décrivent la forme des objets manipulés.
 // Doc : https://www.typescriptlang.org/docs/handbook/2/objects.html
 // -----------------------------------------------------------------------------
-
-// Un agent = un nom + un rôle (le "prompt système").
-type Agent = { nom: string; role: string };
 
 // Une ligne de conversation ou un résultat de tâche.
 type Message = { auteur: string; texte: string };
@@ -35,8 +25,6 @@ type Tache = { id: number; assigneA: string; description: string };
 
 // -----------------------------------------------------------------------------
 // Garde-fous (promesse du README : jamais de boucle infinie ni de dépense folle)
-// -----------------------------------------------------------------------------
-const MODELE = "claude-haiku-5-5"; // modèle léger et peu coûteux
 const MAX_TACHES = 4;              // le chef ne peut pas créer plus de 4 tâches
 const BUDGET_TOKENS = 15000;       // plafond de tokens pour tout le projet
 
@@ -44,34 +32,6 @@ const BUDGET_TOKENS = 15000;       // plafond de tokens pour tout le projet
 // Les personnages. Le "prompt système" fixe le rôle et les contraintes.
 // Doc : https://docs.claude.com/en/docs/build-with-claude/prompt-engineering/system-prompts
 // -----------------------------------------------------------------------------
-
-// Le chef : il découpe une demande en tâches.
-const chef: Agent = {
-  nom: "Lyra",
-  role:
-    "Tu es Lyra, cheffe de projet d'Hivetown. Tu découpes une demande en " +
-    "tâches courtes, concrètes et réalistes. Tu n'inventes jamais de ressources.",
-};
-
-// Le même personnage, mais avec la mission de résumer le travail de l'équipe.
-const redactrice: Agent = {
-  nom: "Lyra",
-  role:
-    "Tu es Lyra, cheffe de projet. À partir des résultats de ton équipe, tu " +
-    "rédiges un court rapport final (5 phrases maximum) : ce qui est décidé et " +
-    "ce qui manque encore. Tu n'inventes rien.",
-};
-
-// Les membres de l'équipe qui reçoivent les tâches.
-const orion: Agent = {
-  nom: "Orion",
-  role: "Tu es Orion, bâtisseur : tu construis et évalues la faisabilité technique.",
-};
-
-const maya: Agent = {
-  nom: "Maya",
-  role: "Tu es Maya, intendante : tu gères le stock de ressources et les récoltes.",
-};
 
 // -----------------------------------------------------------------------------
 // faireParler : fait parler UN agent à partir d'un historique de messages.

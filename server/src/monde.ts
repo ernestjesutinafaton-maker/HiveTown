@@ -31,7 +31,7 @@ export type EtatMonde = {
 export const monde: EtatMonde = {
   stock: { bois: 400, pierre: 250, argile: 1000 },
   besoinsMaison: { bois: 30, pierre: 20, argile: 8 },
-  crueMaxM: 5,
+  crueMaxM: 3,
   margeCrueMinM: 1,
   emplacements: [
     { id: "A", nom: "Berge basse", x: -4, distanceRiveM: 5,  hauteurAuDessusEauM: 2, sol: "sableux" },
